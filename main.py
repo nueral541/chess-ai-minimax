@@ -7,6 +7,8 @@ BLACK = 0
 dark_green = (118, 150, 86)
 light_green = (238, 238, 210)
 transparent_black = (0, 0, 0, 0)
+blue = (0, 0, 255, 100)
+red = (255, 0, 0, 100)
 
 # Global variables
 dragging = False
@@ -53,6 +55,7 @@ pygame.mixer.init()
 screen = pygame.display.set_mode((sq * 8, sq * 8))
 clock = pygame.time.Clock()
 running = True
+attack_bitboard = 0
 
 # Load sounds
 move_sound = pygame.mixer.Sound("sounds/move-self.mp3")
@@ -140,7 +143,7 @@ def handle_mouse():
                     original_col = col
                     remove_old_piece(dragged_piece, row, col)
                     move_sound.play()
-                    print(find_legal_moves(dragged_piece, row, col))  # Move this inside the condition
+                      # Move this inside the condition
 
 def handle_mouse_motion():
     global dragged_piece_rect
@@ -166,6 +169,7 @@ def mouse_up():
         dragged_piece_rect = None
         original_row = None
         original_col = None
+        find_legal_moves(dragged_piece, new_row, new_col)
 
 def handle_capture(piece, row, col):
     piece_color = piece[0]
@@ -181,9 +185,61 @@ def handle_capture(piece, row, col):
                         return  # Exit after capturing a piece
     move_sound.play()
 
+def handle_pawn(row, col, piece_color):
+    pass
+
+def handle_king(row, col, piece_color):
+    pass
+
+def handle_knight(row, col, piece_color):
+    pass
+
+def handle_sliders(piece_type, row, col, piece_color):
+    global attack_bitboard
+    directions = []
+    if piece_type == 'r':  # Rook
+        directions = [8, -8, 1, -1]  # Vertical and horizontal directions
+    elif piece_type == 'b':  # Bishop
+        directions = [9, -9, 7, -7]  # Diagonal directions
+    elif piece_type == 'q':  # Queen
+        directions = [8, -8, 1, -1, 9, -9, 7, -7]  # Combination of rook and bishop directions
+
+    attack_bitboard = 0
+    for direction in directions:
+        current_pos = row * 8 + col
+        while True:
+            current_pos += direction
+            if current_pos < 0 or current_pos >= 64:
+                break  # Out of board bounds
+            if direction in [1, -1]:  # Horizontal directions
+                if current_pos // 8 != row:
+                    break  # Horizontal wrap-around
+            attack_bitboard |= (1 << current_pos)
+
+    return attack_bitboard
+
 # This is going to be the heart of the chess bot
 def find_legal_moves(piece, row, col):
     legal_moves = []
+    piece_type = piece[1]
+    piece_color = piece[0]
+    if piece_type == 'p':
+        handle_pawn(row, col, piece_color)
+    elif piece_type == 'k':
+        handle_king(row, col, piece_color)
+    elif piece_type == 'n':
+        handle_knight(row, col, piece_color)
+    else:
+        print(handle_sliders(piece_type, row, col, piece_color))
+
+def highlight_bitboard(screen, bitboard):
+    for i in range(64):
+        row = i // 8
+        col = i % 8
+        color = blue if not (bitboard & (1 << i)) else red
+        highlight_surface = pygame.Surface((sq, sq), pygame.SRCALPHA)
+        highlight_surface.fill(color)
+        screen.blit(highlight_surface, (col * sq, row * sq))
 
 # Main game loop
 while running:
@@ -200,6 +256,7 @@ while running:
     build_checkerboard(screen, sq)
     draw_board(screen, bitboards)
     make_hitboxes(screen, bitboards)
+    highlight_bitboard(screen, attack_bitboard)
 
     # Draw the dragged piece at the current mouse position
     if dragging and dragged_piece:
