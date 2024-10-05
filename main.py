@@ -1,8 +1,11 @@
-# Example file showing a basic pygame "game loop"
 import pygame
 
-dark_green = (118,150,86)
-light_green = (238,238,210)
+# Define constants for players
+WHITE = 1
+BLACK = 0
+
+dark_green = (118, 150, 86)
+light_green = (238, 238, 210)
 transparent_black = (0, 0, 0, 0)
 
 # Global variables
@@ -12,6 +15,7 @@ dragged_piece_rect = None
 original_row = None
 original_col = None
 sq = 100
+turn = WHITE
 
 piece_images = {
     'bb': pygame.transform.scale(pygame.image.load("/Users/pista/Desktop/GitHub/illegal-chess/pieces_img/black-bishop.png"), (sq, sq)),
@@ -29,28 +33,28 @@ piece_images = {
 }
 
 bitboards = {
-    'bp': 0b0000000011111111000000000000000000000000000000000000000000000000,
-    'wp': 0b0000000000000000000000000000000000000000000000001111111100000000,
-    'br': 0b1000000100000000000000000000000000000000000000000000000000000000,
-    'wr': 0b0000000000000000000000000000000000000000000000000000000010000001,
-    'bn': 0b0100001000000000000000000000000000000000000000000000000000000000,
-    'wn': 0b0000000000000000000000000000000000000000000000000000000001000010,
-    'bb': 0b0010010000000000000000000000000000000000000000000000000000000000,
-    'wb': 0b0000000000000000000000000000000000000000000000000000000000100100,
-    'bq': 0b0000100000000000000000000000000000000000000000000000000000000000,
-    'wq': 0b0000000000000000000000000000000000000000000000000000000000001000,
-    'bk': 0b0001000000000000000000000000000000000000000000000000000000000000,
-    'wk': 0b0000000000000000000000000000000000000000000000000000000000010000,
+    'wp': 0b0000000011111111000000000000000000000000000000000000000000000000,
+    'bp': 0b0000000000000000000000000000000000000000000000001111111100000000,
+    'wr': 0b1000000100000000000000000000000000000000000000000000000000000000,
+    'br': 0b0000000000000000000000000000000000000000000000000000000010000001,
+    'wn': 0b0100001000000000000000000000000000000000000000000000000000000000,
+    'bn': 0b0000000000000000000000000000000000000000000000000000000001000010,
+    'wb': 0b0010010000000000000000000000000000000000000000000000000000000000,
+    'bb': 0b0000000000000000000000000000000000000000000000000000000000100100,
+    'wq': 0b0000100000000000000000000000000000000000000000000000000000000000,
+    'bq': 0b0000000000000000000000000000000000000000000000000000000000001000,
+    'wk': 0b0001000000000000000000000000000000000000000000000000000000000000,
+    'bk': 0b0000000000000000000000000000000000000000000000000000000000010000,
 }
 
 # pygame setup
 pygame.init()
 pygame.mixer.init()
-screen = pygame.display.set_mode((sq*8, sq*8))
+screen = pygame.display.set_mode((sq * 8, sq * 8))
 clock = pygame.time.Clock()
 running = True
 
-#load sounds
+# Load sounds
 move_sound = pygame.mixer.Sound("sounds/move-self.mp3")
 capture_sound = pygame.mixer.Sound("sounds/capture.mp3")
 
@@ -120,17 +124,23 @@ def update_bitboard(piece, new_row, new_col):
     bitboards[piece] |= (1 << new_location)
 
 def handle_mouse():
-    global dragging, dragged_piece, dragged_piece_rect, row, col
-    mouse_pos = pygame.mouse.get_pos()
-    move_sound.play()
-    for rect in rects:
-        if rect.collidepoint(mouse_pos):
-            row = rect.y // sq
-            col = rect.x // sq
-            dragging = True
-            dragged_piece_rect = rect
-            dragged_piece = find_piece_by_rect(rect)
-            remove_old_piece(dragged_piece, row, col)
+    global dragging, dragged_piece, dragged_piece_rect, original_row, original_col
+    if dragged_piece is None:
+        mouse_pos = pygame.mouse.get_pos()
+        for rect in rects:
+            if rect.collidepoint(mouse_pos):
+                row = rect.y // sq
+                col = rect.x // sq
+                piece = find_piece_by_rect(rect)
+                if (piece[0] == 'w' and turn == WHITE) or (piece[0] == 'b' and turn == BLACK):
+                    dragging = True
+                    dragged_piece_rect = rect
+                    dragged_piece = piece
+                    original_row = row
+                    original_col = col
+                    remove_old_piece(dragged_piece, row, col)
+                    move_sound.play()
+                    print(find_legal_moves(dragged_piece, row, col))  # Move this inside the condition
 
 def handle_mouse_motion():
     global dragged_piece_rect
@@ -140,20 +150,40 @@ def handle_mouse_motion():
         dragged_piece_rect.y = mouse_pos[1] - sq // 2
 
 def mouse_up():
-    global dragging, dragged_piece, dragged_piece_rect, row, col
+    global dragging, dragged_piece, dragged_piece_rect, original_row, original_col, turn
     if dragging:
-        move_sound.play()
-        dragging = False
         mouse_pos = pygame.mouse.get_pos()
         new_col = mouse_pos[0] // sq
         new_row = mouse_pos[1] // sq
+        handle_capture(dragged_piece, new_row, new_col)
         dragged_piece_rect.x = new_col * sq
         dragged_piece_rect.y = new_row * sq
         update_bitboard(dragged_piece, new_row, new_col)
+        dragging = False
+        if (new_row != original_row) or (new_col != original_col):
+            turn = WHITE if turn == BLACK else BLACK
         dragged_piece = None
         dragged_piece_rect = None
-        row = None
-        col = None
+        original_row = None
+        original_col = None
+
+def handle_capture(piece, row, col):
+    piece_color = piece[0]
+    opposite_color = 'b' if piece_color == 'w' else 'w'
+    
+    for piece_type, bitboard in bitboards.items():
+        if piece_type[0] == opposite_color:
+            for i in range(64):
+                if bitboard & (1 << i):
+                    if i // 8 == row and i % 8 == col:
+                        capture_sound.play()
+                        bitboards[piece_type] &= ~(1 << i)
+                        return  # Exit after capturing a piece
+    move_sound.play()
+
+# This is going to be the heart of the chess bot
+def find_legal_moves(piece, row, col):
+    legal_moves = []
 
 # Main game loop
 while running:
