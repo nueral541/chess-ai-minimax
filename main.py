@@ -127,8 +127,56 @@ def update_bitboard(piece, new_row, new_col):
     # Update the bitboard
     bitboards[piece] |= (1 << new_location)
 
-def update_board(row, col, new_row, new_col):
-    pass
+def handle_en_passant(move):
+    global bitboards
+    print(move.to_square)
+    captured_pawn_square = (64 - move.to_square) + (8 if board.turn == chess.WHITE else -8)
+    captured_pawn_bitboard = 'wp' if board.turn == chess.BLACK else 'bp'
+    
+    # Remove the captured pawn from the bitboard
+    bitboards[captured_pawn_bitboard] ^= (1 << captured_pawn_square)
+    
+    # Play capture sound
+    capture_sound.play()
+
+def handle_castle(move):
+        global bitboards
+        if move.to_square == 2:
+            # Move the white rook
+            bitboards['wr'] &= ~(1 << 56) #0
+            bitboards['wr'] |= (1 << 59) #3
+        elif move.to_square == 6:
+            # Move the white rook
+            bitboards['wr'] &= ~(1 << 63) #7
+            bitboards['wr'] |= (1 << 61) #5
+        elif move.to_square == 58:
+            # Move the black rook
+            bitboards['br'] &= ~(1 << 0) 
+            bitboards['br'] |= (1 << 3)
+        elif move.to_square == 62:
+            # Move the black rook
+            bitboards['br'] &= ~(1 << 7)
+            bitboards['br'] |= (1 << 5)
+    
+def update_board(piece, row, col, new_row, new_col):
+    global turn
+    move = chess.Move.from_uci(f"{chr(col + 97)}{8 - row}{chr(new_col + 97)}{8 - new_row}")
+    if move in board.legal_moves:
+        if board.is_en_passant(move):
+            handle_en_passant(move)
+        elif board.is_castling(move):
+            handle_castle(move)
+        handle_capture(dragged_piece, new_row, new_col)
+        board.push(move)
+        print(board)
+        update_bitboard(piece, new_row, new_col)
+        turn = WHITE if turn == BLACK else BLACK
+    else:
+        print("Illegal move")
+        # Return the piece to its original position
+        update_bitboard(piece, row, col)
+        dragged_piece_rect.x = col * sq
+        dragged_piece_rect.y = row * sq
 
 def handle_mouse():
     global dragging, dragged_piece, dragged_piece_rect, original_row, original_col
@@ -147,7 +195,6 @@ def handle_mouse():
                     original_col = col
                     remove_old_piece(dragged_piece, row, col)
                     move_sound.play()
-                    find_legal_moves(dragged_piece, row, col)  # Move this inside the condition
 
 def handle_mouse_motion():
     global dragged_piece_rect
@@ -162,14 +209,16 @@ def mouse_up():
         mouse_pos = pygame.mouse.get_pos()
         new_col = mouse_pos[0] // sq
         new_row = mouse_pos[1] // sq
-        handle_capture(dragged_piece, new_row, new_col)
-        dragged_piece_rect.x = new_col * sq
-        dragged_piece_rect.y = new_row * sq
-        update_bitboard(dragged_piece, new_row, new_col)
-        update_board(original_row, original_col, new_row, new_col)
-        dragging = False
         if (new_row != original_row) or (new_col != original_col):
-            turn = WHITE if turn == BLACK else BLACK
+            dragged_piece_rect.x = new_col * sq
+            dragged_piece_rect.y = new_row * sq
+            update_board(dragged_piece, original_row, original_col, new_row, new_col)
+        else:
+            # Place the piece back to its original position
+            update_bitboard(dragged_piece, original_row, original_col)
+            dragged_piece_rect.x = original_col * sq
+            dragged_piece_rect.y = original_row * sq
+        dragging = False
         dragged_piece = None
         dragged_piece_rect = None
         original_row = None
@@ -188,32 +237,6 @@ def handle_capture(piece, row, col):
                         bitboards[piece_type] &= ~(1 << i)
                         return  # Exit after capturing a piece
     move_sound.play()
-
-def handle_pawn(row, col, piece_color):
-    pass
-
-def handle_king(row, col, piece_color):
-    pass
-
-def handle_knight(row, col, piece_color):
-    pass
-
-def handle_sliders(piece_type, row, col, piece_color):
-    pass
-
-# This is going to be the heart of the chess bot
-def find_legal_moves(piece, row, col):
-    legal_moves = []
-    piece_type = piece[1]
-    piece_color = piece[0]
-    if piece_type == 'p':
-        handle_pawn(row, col, piece_color)
-    elif piece_type == 'k':
-        handle_king(row, col, piece_color)
-    elif piece_type == 'n':
-        handle_knight(row, col, piece_color)
-    else:
-        print(handle_sliders(piece_type, row, col, piece_color))
 
 def highlight_bitboard(screen, bitboard):
     for i in range(64):
