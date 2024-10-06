@@ -152,7 +152,18 @@ def handle_castle(move):
             # Move the black rook
             bitboards['br'] &= ~(1 << 7)
             bitboards['br'] |= (1 << 5)
-    
+
+def handle_promotion(row, col):
+    pos = row * 8 + col
+    if turn == WHITE:
+        bitboards['bp'] ^= (1 << pos)
+        bitboards['bq'] |= (1 << pos)
+    else:
+        bitboards['wp'] ^= (1 << pos)
+        bitboards['wq'] |= (1 << pos)
+
+    print(board)
+
 def update_board(piece, row, col, new_row, new_col):
     global turn
     move = chess.Move.from_uci(f"{chr(col + 97)}{8 - row}{chr(new_col + 97)}{8 - new_row}")
@@ -167,11 +178,18 @@ def update_board(piece, row, col, new_row, new_col):
         update_bitboard(piece, new_row, new_col)
         turn = WHITE if turn == BLACK else BLACK
     else:
-        print("Illegal move")
-        # Return the piece to its original position
-        update_bitboard(piece, row, col)
-        dragged_piece_rect.x = col * sq
-        dragged_piece_rect.y = row * sq
+        promotion_move = chess.Move.from_uci(f"{chr(col + 97)}{8 - row}{chr(new_col + 97)}{8 - new_row}q")
+        if promotion_move in board.legal_moves:
+            board.push(promotion_move)
+            handle_capture(dragged_piece, new_row, new_col)
+            update_bitboard(piece, new_row, new_col)
+            turn = WHITE if turn == BLACK else BLACK
+            handle_promotion(new_row, new_col)
+        else:
+            # Return the piece to its original position
+            update_bitboard(piece, row, col)
+            dragged_piece_rect.x = col * sq
+            dragged_piece_rect.y = row * sq
 
 def handle_mouse():
     global dragging, dragged_piece, dragged_piece_rect, original_row, original_col
