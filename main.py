@@ -216,6 +216,32 @@ def handle_mouse_motion():
         dragged_piece_rect.x = mouse_pos[0] - sq // 2
         dragged_piece_rect.y = mouse_pos[1] - sq // 2
 
+def handle_end_game(board):
+    global running
+    if board.is_checkmate():
+        if turn == WHITE:
+            print("Black wins!")
+        else:
+            print("White wins!")
+        pygame.time.wait(1000)
+        running = False
+    elif board.is_stalemate():
+        print("Stalemate!")
+        pygame.time.wait(1000)
+        running = False
+    elif board.is_insufficient_material():
+        print("Insufficient material!")
+        pygame.time.wait(1000)
+        running = False
+    elif board.is_seventyfive_moves():
+        print("Seventy-five moves rule!")
+        pygame.time.wait(1000)
+        running = False
+    elif board.is_fivefold_repetition():
+        print("Fivefold repetition!")
+        pygame.time.wait(1000)
+        running = False
+
 def mouse_up():
     global dragging, dragged_piece, dragged_piece_rect, original_row, original_col, turn
     if dragging:
@@ -262,6 +288,9 @@ def highlight_bitboard(screen, bitboard):
 
 # Main game loop
 while running:
+    #check if game has ended
+    handle_end_game(board)
+
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
