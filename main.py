@@ -127,17 +127,12 @@ def update_bitboard(piece, new_row, new_col):
     # Update the bitboard
     bitboards[piece] |= (1 << new_location)
 
-def handle_en_passant(move):
-    global bitboards
-    print(move.to_square)
-    captured_pawn_square = (64 - move.to_square) + (8 if board.turn == chess.WHITE else -8)
-    captured_pawn_bitboard = 'wp' if board.turn == chess.BLACK else 'bp'
-    
-    # Remove the captured pawn from the bitboard
-    bitboards[captured_pawn_bitboard] ^= (1 << captured_pawn_square)
-    
-    # Play capture sound
-    capture_sound.play()
+def handle_en_passant(row, col):
+    pos = row*8+col
+    if turn == WHITE:
+        bitboards['bp'] ^= (1 << (pos + 8))
+    else:
+        bitboards['wp'] ^= (1 << (pos - 8))
 
 def handle_castle(move):
         global bitboards
@@ -163,7 +158,7 @@ def update_board(piece, row, col, new_row, new_col):
     move = chess.Move.from_uci(f"{chr(col + 97)}{8 - row}{chr(new_col + 97)}{8 - new_row}")
     if move in board.legal_moves:
         if board.is_en_passant(move):
-            handle_en_passant(move)
+            handle_en_passant(new_row, new_col)
         elif board.is_castling(move):
             handle_castle(move)
         handle_capture(dragged_piece, new_row, new_col)
