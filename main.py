@@ -58,6 +58,8 @@ screen = pygame.display.set_mode((sq * 8, sq * 8))
 clock = pygame.time.Clock()
 running = True
 
+from minimax import best_move
+
 # Load sounds
 move_sound = pygame.mixer.Sound("sounds/move-self.mp3")
 capture_sound = pygame.mixer.Sound("sounds/capture.mp3")
@@ -156,11 +158,11 @@ def handle_castle(move):
 def handle_promotion(row, col):
     pos = row * 8 + col
     if turn == WHITE:
-        bitboards['bp'] ^= (1 << pos)
-        bitboards['bq'] |= (1 << pos)
-    else:
         bitboards['wp'] ^= (1 << pos)
         bitboards['wq'] |= (1 << pos)
+    else:
+        bitboards['bp'] ^= (1 << pos)
+        bitboards['bq'] |= (1 << pos)
 
     print(board)
 
@@ -177,37 +179,46 @@ def update_board(piece, row, col, new_row, new_col):
         print(board)
         update_bitboard(piece, new_row, new_col)
         turn = WHITE if turn == BLACK else BLACK
+        print("Turn is BLACK, calling handle_black")
+        handle_black(board)
     else:
         promotion_move = chess.Move.from_uci(f"{chr(col + 97)}{8 - row}{chr(new_col + 97)}{8 - new_row}q")
         if promotion_move in board.legal_moves:
-            board.push(promotion_move)
             handle_capture(dragged_piece, new_row, new_col)
             update_bitboard(piece, new_row, new_col)
             turn = WHITE if turn == BLACK else BLACK
+            if turn == WHITE:
+                board.push(promotion_move)
+            else:
+                board.push(promotion_move)
+                handle_black(board)
             handle_promotion(new_row, new_col)
         else:
             # Return the piece to its original position
             update_bitboard(piece, row, col)
             dragged_piece_rect.x = col * sq
             dragged_piece_rect.y = row * sq
+        if turn == BLACK:
+            print("Turn is BLACK, illegal move")
 
 def handle_mouse():
     global dragging, dragged_piece, dragged_piece_rect, original_row, original_col
-    if dragged_piece is None:
-        mouse_pos = pygame.mouse.get_pos()
-        for rect in rects:
-            if rect.collidepoint(mouse_pos):
-                row = rect.y // sq
-                col = rect.x // sq
-                piece = find_piece_by_rect(rect)
-                if (piece[0] == 'w' and turn == WHITE) or (piece[0] == 'b' and turn == BLACK):
-                    dragging = True
-                    dragged_piece_rect = rect
-                    dragged_piece = piece
-                    original_row = row
-                    original_col = col
-                    remove_old_piece(dragged_piece, row, col)
-                    move_sound.play()
+    if turn == WHITE:
+        if dragged_piece is None:
+            mouse_pos = pygame.mouse.get_pos()
+            for rect in rects:
+                if rect.collidepoint(mouse_pos):
+                    row = rect.y // sq
+                    col = rect.x // sq
+                    piece = find_piece_by_rect(rect)
+                    if (piece[0] == 'w' and turn == WHITE) or (piece[0] == 'b' and turn == BLACK):
+                        dragging = True
+                        dragged_piece_rect = rect
+                        dragged_piece = piece
+                        original_row = row
+                        original_col = col
+                        remove_old_piece(dragged_piece, row, col)
+                        move_sound.play()
 
 def handle_mouse_motion():
     global dragged_piece_rect
@@ -223,45 +234,109 @@ def handle_end_game(board):
             print("Black wins!")
         else:
             print("White wins!")
-        pygame.time.wait(1000)
+        pygame.time.wait(5000)
         running = False
     elif board.is_stalemate():
         print("Stalemate!")
-        pygame.time.wait(1000)
+        pygame.time.wait(5000)
         running = False
     elif board.is_insufficient_material():
         print("Insufficient material!")
-        pygame.time.wait(1000)
+        pygame.time.wait(5000)
         running = False
     elif board.is_seventyfive_moves():
         print("Seventy-five moves rule!")
-        pygame.time.wait(1000)
+        pygame.time.wait(5000)
         running = False
     elif board.is_fivefold_repetition():
         print("Fivefold repetition!")
-        pygame.time.wait(1000)
+        pygame.time.wait(5000)
         running = False
+
+def handle_black(board):
+    global turn
+    print("Inside handle_black")
+    bestmove = best_move(board)
+    if bestmove:
+        print(f"Best move found: {bestmove}")
+        move = chess.Move.from_uci(bestmove)
+        
+        # Filter out non-queen promotion moves
+        if move.promotion and move.promotion != chess.QUEEN:
+            print(f"Skipping non-queen promotion move: {move}")
+            return
+        
+        if move in board.legal_moves:
+            piece = board.piece_at(move.from_square)
+            if piece is None:
+                print(f"No piece found at {move.from_square}")
+                return
+            piece_type = piece.symbol()
+            print(piece_type)
+            piece_type = 'w' + piece_type.lower() if piece_type.isupper() else 'b' + piece_type
+            print(piece_type)
+            start_row = 7 - (move.from_square // 8)
+            start_col = move.from_square % 8
+            end_row = 7 - (move.to_square // 8)
+            end_col = move.to_square % 8
+            print(f"Moving piece {piece_type} from ({start_row}, {start_col}) to ({end_row}, {end_col})")
+
+            # Handle en passant
+            if board.is_en_passant(move):
+                print("En passant move detected")
+                handle_en_passant(piece_type, start_row, start_col, end_row, end_col)
+
+            # Handle promotion
+            if move.promotion:
+                print("Promotion move detected")
+                handle_promotion(end_row, end_col)
+                remove_old_piece(piece_type, start_row, start_col)
+                remove_old_piece(piece_type, end_row, end_col)
+                board.push(move)
+            else:
+                board.push(move)
+                remove_old_piece(piece_type, start_row, start_col)
+                update_bitboard(piece_type, end_row, end_col)
+                handle_capture(piece_type, end_row, end_col)
+
+            # Handle castling
+            if board.is_castling(move):
+                print("Castling move detected")
+                handle_castle(piece_type, start_row, start_col, end_row, end_col)
+
+            turn = WHITE
+            print(f"Turn after black move: {turn}")
+        else:
+            print("Illegal move")
+    else:
+        print("No move found")
 
 def mouse_up():
     global dragging, dragged_piece, dragged_piece_rect, original_row, original_col, turn
-    if dragging:
-        mouse_pos = pygame.mouse.get_pos()
-        new_col = mouse_pos[0] // sq
-        new_row = mouse_pos[1] // sq
-        if (new_row != original_row) or (new_col != original_col):
-            dragged_piece_rect.x = new_col * sq
-            dragged_piece_rect.y = new_row * sq
-            update_board(dragged_piece, original_row, original_col, new_row, new_col)
-        else:
-            # Place the piece back to its original position
-            update_bitboard(dragged_piece, original_row, original_col)
-            dragged_piece_rect.x = original_col * sq
-            dragged_piece_rect.y = original_row * sq
-        dragging = False
-        dragged_piece = None
-        dragged_piece_rect = None
-        original_row = None
-        original_col = None
+    print("hello")
+    if turn == WHITE:
+        if dragging:
+            mouse_pos = pygame.mouse.get_pos()
+            new_col = mouse_pos[0] // sq
+            new_row = mouse_pos[1] // sq
+            if (new_row != original_row) or (new_col != original_col):
+                dragged_piece_rect.x = new_col * sq
+                dragged_piece_rect.y = new_row * sq
+                update_board(dragged_piece, original_row, original_col, new_row, new_col)
+            else:
+                # Place the piece back to its original position
+                update_bitboard(dragged_piece, original_row, original_col)
+                dragged_piece_rect.x = original_col * sq
+                dragged_piece_rect.y = original_row * sq
+            dragging = False
+            dragged_piece = None
+            dragged_piece_rect = None
+            original_row = None
+            original_col = None
+            print(f"Turn after white move: {turn}")
+            if turn == BLACK:
+                print("Turn is BLACK, calling handle_black")
+                handle_black(board)
 
 def handle_capture(piece, row, col):
     piece_color = piece[0]
@@ -277,14 +352,14 @@ def handle_capture(piece, row, col):
                         return  # Exit after capturing a piece
     move_sound.play()
 
-def highlight_bitboard(screen, bitboard):
+'''def highlight_bitboard(screen, bitboard):
     for i in range(64):
         row = i // 8
         col = i % 8
         color = blue if not (bitboard & (1 << i)) else red
         highlight_surface = pygame.Surface((sq, sq), pygame.SRCALPHA)
         highlight_surface.fill(color)
-        screen.blit(highlight_surface, (col * sq, row * sq))
+        screen.blit(highlight_surface, (col * sq, row * sq))'''
 
 # Main game loop
 while running:

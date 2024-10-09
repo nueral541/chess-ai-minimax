@@ -1,1 +1,1 @@
-pygame.quit()
+WHITE
