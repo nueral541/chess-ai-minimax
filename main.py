@@ -155,13 +155,18 @@ def handle_castle(move):
             bitboards['br'] &= ~(1 << 7)
             bitboards['br'] |= (1 << 5)
 
+def exterminate_position(row, col):
+    pos = row * 8 + col
+    for bit in bitboards:
+        bitboards[bit] &= ~(1 << pos)
+
 def handle_promotion(row, col):
+    exterminate_position(row, col)
+
     pos = row * 8 + col
     if turn == WHITE:
-        bitboards['wp'] ^= (1 << pos)
         bitboards['wq'] |= (1 << pos)
     else:
-        bitboards['bp'] ^= (1 << pos)
         bitboards['bq'] |= (1 << pos)
 
     print(board)
@@ -253,6 +258,15 @@ def handle_end_game(board):
         pygame.time.wait(5000)
         running = False
 
+def clear_overlapping_pieces():
+    global bitboards
+    all_pieces = 0
+    for piece, bitboard in bitboards.items():
+        all_pieces |= bitboard
+
+    for piece, bitboard in bitboards.items():
+        bitboards[piece] &= all_pieces
+
 def handle_black(board):
     global turn
     print("Inside handle_black")
@@ -264,6 +278,7 @@ def handle_black(board):
         # Filter out non-queen promotion moves
         if move.promotion and move.promotion != chess.QUEEN:
             print(f"Skipping non-queen promotion move: {move}")
+            handle_black(board)
             return
         
         if move in board.legal_moves:
@@ -290,8 +305,6 @@ def handle_black(board):
             if move.promotion:
                 print("Promotion move detected")
                 handle_promotion(end_row, end_col)
-                remove_old_piece(piece_type, start_row, start_col)
-                remove_old_piece(piece_type, end_row, end_col)
                 board.push(move)
             else:
                 board.push(move)
@@ -303,6 +316,9 @@ def handle_black(board):
             if board.is_castling(move):
                 print("Castling move detected")
                 handle_castle(piece_type, start_row, start_col, end_row, end_col)
+
+            # Clear overlapping pieces
+            clear_overlapping_pieces()
 
             turn = WHITE
             print(f"Turn after black move: {turn}")

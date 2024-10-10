@@ -1,1 +1,1 @@
-WHITE
+handle_black(board)
